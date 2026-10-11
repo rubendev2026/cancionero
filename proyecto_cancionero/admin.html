@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Baraja Norteña — Administración</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<style>
+body{font-family:Arial,sans-serif;margin:0;background:#101010;color:#fff}
+header{padding:18px;background:#181818;position:sticky;top:0;z-index:2}
+main{max-width:900px;margin:auto;padding:14px}.grid{display:grid;gap:12px}
+.card{background:#202020;border-radius:14px;padding:14px;margin:9px 0}
+input,textarea,button{width:100%;box-sizing:border-box;padding:12px;margin:5px 0;border-radius:9px;border:0;font-size:16px}
+input,textarea{background:#fff;color:#111}button{background:#d6a52c;font-weight:bold}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}.muted{color:#aaa}.ok{color:#75e09a}
+</style>
+</head>
+<body>
+<header><b>🎤 BARAJA NORTEÑA — ADMIN</b></header>
+<main>
+<section id="login">
+<h2>Acceso privado</h2>
+<input id="email" type="email" placeholder="Correo">
+<input id="password" type="password" placeholder="Contraseña">
+<button onclick="login()">ENTRAR</button>
+<div id="msg" class="muted"></div>
+</section>
+<section id="app" style="display:none">
+<button onclick="logout()">Cerrar sesión</button>
+<h2>📥 Peticiones</h2><div id="stats"></div><div id="requests"></div>
+<h2>🎵 Repertorio</h2>
+<div class="card">
+<input id="sn" placeholder="Nombre de la canción">
+<input id="st" placeholder="Tono">
+<input id="sc" placeholder="Categoría">
+<textarea id="sl" rows="5" placeholder="Letra (solo para tu uso privado)"></textarea>
+<button onclick="addSong()">AGREGAR CANCIÓN</button>
+</div>
+<div id="songs"></div>
+</section>
+</main>
+<script>
+const cfg=window.BARAJA_CONFIG;
+const sb=supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY);
+let songs=[], requests=[];
+async function login(){
+ const {error}=await sb.auth.signInWithPassword({email:email.value.trim(),password:password.value});
+ msg.textContent=error?error.message:'';
+ if(!error) start();
+}
+async function start(){
+ login.style.display='none'; app.style.display='block'; await refresh(); subscribe();
+}
+async function logout(){await sb.auth.signOut();location.reload()}
+async function refresh(){
+ let a=await sb.from('songs').select('*').order('request_count',{ascending:false}); songs=a.data||[];
+ let r=await sb.from('requests').select('*,songs(name)').order('created_at',{ascending:false}); requests=r.data||[];
+ render();
+}
+function render(){
+ const pending=requests.filter(r=>r.status==='Pendiente');
+ const done=requests.filter(r=>r.status==='Complacida');
+ stats.innerHTML=`<div class="card"><b>${requests.length}</b> peticiones · <b>${done.length}</b> complacidas · <b>${pending.length}</b> pendientes</div>`;
+ requestsEl();
+ songsEl();
+}
+function requestsEl(){
+ document.getElementById('requests').innerHTML=requests.map(r=>`<div class="card">
+<b>${esc(r.songs?.name||'')}</b><br>
+<span class="muted">${esc(r.requester_name||'')} ${r.dedication?'· '+esc(r.dedication):''}</span><br>
+<small>${new Date(r.created_at).toLocaleString('es-MX')} · ${esc(r.status)}</small>
+${r.status==='Pendiente'?`<button onclick="complete('${r.id}')">✓ COMPLACIDA</button>`:''}
+</div>`).join('');
+}
+function songsEl(){
+ document.getElementById('songs').innerHTML=songs.map(s=>`<div class="card">
+<b>${esc(s.name)}</b> · ${s.request_count} peticiones<br>
+<span class="muted">${esc(s.category)} · tono: ${esc(s.tone)}</span>
+<button onclick="viewSong('${s.id}')">VER NOMBRE · TONO · LETRA</button>
+<div class="row"><button onclick="toggleSong('${s.id}',${!s.active})">${s.active?'DESACTIVAR':'ACTIVAR'}</button><button onclick="editSong('${s.id}')">EDITAR</button></div>
+</div>`).join('');
+}
+async function complete(id){await sb.from('requests').update({status:'Complacida',complacida_at:new Date().toISOString()}).eq('id',id);refresh()}
+async function addSong(){
+ const {error}=await sb.from('songs').insert({name:sn.value.trim(),tone:st.value.trim(),category:sc.value.trim()||'Norteñas',lyrics:sl.value});
+ if(error)alert(error.message); else {sn.value=st.value=sc.value=sl.value='';refresh()}
+}
+async function toggleSong(id,val){await sb.from('songs').update({active:val}).eq('id',id);refresh()}
+async function editSong(id){
+ const s=songs.find(x=>x.id===id); if(!s)return;
+ const name=prompt('Nombre',s.name); if(name===null)return;
+ const tone=prompt('Tono',s.tone||''); if(tone===null)return;
+ const cat=prompt('Categoría',s.category||''); if(cat===null)return;
+ const lyrics=prompt('Letra',s.lyrics||''); if(lyrics===null)return;
+ await sb.from('songs').update({name,tone,category:cat,lyrics}).eq('id',id);refresh();
+}
+function viewSong(id){
+ const s=songs.find(x=>x.id===id);
+ alert(`NOMBRE: ${s.name}\nTONO: ${s.tone||''}\n\nLETRA:\n${s.lyrics||''}`);
+}
+function subscribe(){
+ sb.channel('requests-live').on('postgres_changes',{event:'*',schema:'public',table:'requests'},()=>refresh()).subscribe();
+}
+function esc(x){return (x||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+sb.auth.getSession().then(({data})=>{if(data.session)start()});
+</script>
+</body>
+</html>

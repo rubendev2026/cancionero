@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Baraja Norteña — Pide tu canción</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<style>
+body{font-family:Arial,sans-serif;margin:0;background:#111;color:#fff}
+header{padding:20px;background:#171717;text-align:center;position:sticky;top:0}
+h1{margin:0;font-size:24px}.sub{color:#ddd;margin-top:5px}
+main{max-width:760px;margin:auto;padding:16px}
+input,textarea,button,select{width:100%;box-sizing:border-box;padding:13px;margin:7px 0;border-radius:10px;border:0;font-size:16px}
+input,textarea,select{background:#fff;color:#111}button{background:#d6a52c;color:#111;font-weight:bold}
+.card{background:#202020;border-radius:14px;padding:14px;margin:10px 0}.muted{color:#bbb}
+.small{font-size:13px}
+</style>
+</head>
+<body>
+<header><h1>BARAJA NORTEÑA</h1><div class="sub">Tú eliges la canción, nosotros la tocamos en vivo</div></header>
+<main>
+<input id="search" placeholder="🔎 Buscar canción..." oninput="render()">
+<div id="status" class="muted">Cargando repertorio...</div>
+<div id="list"></div>
+</main>
+<script>
+const cfg=window.BARAJA_CONFIG;
+const sb=supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY);
+let songs=[];
+async function load(){ 
+ if(cfg.SUPABASE_URL.includes("PON_AQUI")){status.textContent="Falta conectar Supabase.";return}
+ const {data,error}=await sb.from('songs').select('id,name,category').eq('active',true).order('name');
+ if(error){status.textContent=error.message;return}
+ songs=data||[]; render();
+}
+function render(){
+ const q=document.getElementById('search').value.toLowerCase();
+ const a=songs.filter(s=>s.name.toLowerCase().includes(q));
+ document.getElementById('status').textContent=`${a.length} canciones disponibles`;
+ document.getElementById('list').innerHTML=a.map(s=>`<div class="card"><b>${esc(s.name)}</b><div class="muted small">${esc(s.category||'')}</div><button onclick="ask('${s.id}')">🎤 PEDIR</button></div>`).join('');
+}
+async function ask(id){
+ const s=songs.find(x=>x.id===id);
+ const name=prompt(`Canción: ${s.name}\n\nTu nombre (opcional):`); if(name===null)return;
+ const dedication=prompt('Dedicatoria, felicitación o mensaje (opcional):'); if(dedication===null)return;
+ const {error}=await sb.rpc('register_request',{p_song_id:id,p_requester_name:name.trim(),p_dedication:dedication.trim()});
+ if(error) alert(error.message); else alert('¡Petición enviada! 🎤');
+}
+function esc(x){return (x||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+load();
+</script>
+</body>
+</html>
