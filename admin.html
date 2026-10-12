@@ -41,10 +41,14 @@ input,textarea{background:#fff;color:#111}button{background:#d6a52c;font-weight:
 </section>
 </main>
 <script>
-const cfg=window.BARAJA_CONFIG;
-const sb=supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY);
+const cfg=window.BARAJA_CONFIG||{};
+let sb=null;
+if(window.supabase && cfg.SUPABASE_URL && cfg.SUPABASE_URL.startsWith('http') && cfg.SUPABASE_ANON_KEY && !cfg.SUPABASE_ANON_KEY.includes('PON_AQUI')){
+  try { sb=supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY); } catch(e){ console.error(e); }
+}
 let songs=[], requests=[];
 async function login(){
+ if(!sb){ msg.textContent="Falta configurar o recargar config.js con la URL y clave válidas."; return; }
  const {error}=await sb.auth.signInWithPassword({email:email.value.trim(),password:password.value});
  msg.textContent=error?error.message:'';
  if(!error) start();
@@ -103,7 +107,7 @@ function subscribe(){
  sb.channel('requests-live').on('postgres_changes',{event:'*',schema:'public',table:'requests'},()=>refresh()).subscribe();
 }
 function esc(x){return (x||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
-sb.auth.getSession().then(({data})=>{if(data.session)start()});
+if(sb) sb.auth.getSession().then(({data})=>{if(data?.session)start()});
 </script>
 </body>
 </html>
