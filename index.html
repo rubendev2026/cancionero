@@ -25,13 +25,16 @@ input,textarea,select{background:#fff;color:#111}button{background:#d6a52c;color
 <div id="list"></div>
 </main>
 <script>
-const cfg=window.BARAJA_CONFIG;
-const sb=supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY);
+const cfg=window.BARAJA_CONFIG||{};
+let sb=null;
+if(window.supabase && cfg.SUPABASE_URL && cfg.SUPABASE_URL.startsWith('http') && cfg.SUPABASE_ANON_KEY && !cfg.SUPABASE_ANON_KEY.includes('PON_AQUI')){
+  try { sb=supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY); } catch(e){ console.error(e); }
+}
 let songs=[];
 async function load(){ 
- if(cfg.SUPABASE_URL.includes("PON_AQUI")){status.textContent="Falta conectar Supabase.";return}
+ if(!sb){ document.getElementById('status').textContent="Falta conectar Supabase o recargar la página."; return; }
  const {data,error}=await sb.from('songs').select('id,name,category').eq('active',true).order('name');
- if(error){status.textContent=error.message;return}
+ if(error){ document.getElementById('status').textContent=error.message; return; }
  songs=data||[]; render();
 }
 function render(){
