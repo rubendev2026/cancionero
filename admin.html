@@ -48,13 +48,19 @@ if(window.supabase && cfg.SUPABASE_URL && cfg.SUPABASE_URL.startsWith('http') &&
 }
 let songs=[], requests=[];
 async function login(){
- if(!sb){ msg.textContent="Falta configurar o recargar config.js con la URL y clave válidas."; return; }
- const {error}=await sb.auth.signInWithPassword({email:email.value.trim(),password:password.value});
- msg.textContent=error?error.message:'';
+ const msgEl = document.getElementById('msg');
+ if(!sb){ msgEl.textContent="Falta configurar o recargar config.js con la URL y clave válidas."; return; }
+ const emailVal = document.getElementById('email').value.trim();
+ const passVal = document.getElementById('password').value;
+ const {error}=await sb.auth.signInWithPassword({email:emailVal, password:passVal});
+ msgEl.textContent=error?error.message:'';
  if(!error) start();
 }
 async function start(){
- login.style.display='none'; app.style.display='block'; await refresh(); subscribe();
+ document.getElementById('login').style.display='none';
+ document.getElementById('app').style.display='block';
+ await refresh();
+ subscribe();
 }
 async function logout(){await sb.auth.signOut();location.reload()}
 async function refresh(){
@@ -65,7 +71,7 @@ async function refresh(){
 function render(){
  const pending=requests.filter(r=>r.status==='Pendiente');
  const done=requests.filter(r=>r.status==='Complacida');
- stats.innerHTML=`<div class="card"><b>${requests.length}</b> peticiones · <b>${done.length}</b> complacidas · <b>${pending.length}</b> pendientes</div>`;
+ document.getElementById('stats').innerHTML=`<div class="card"><b>${requests.length}</b> peticiones · <b>${done.length}</b> complacidas · <b>${pending.length}</b> pendientes</div>`;
  requestsEl();
  songsEl();
 }
@@ -87,6 +93,7 @@ function songsEl(){
 }
 async function complete(id){await sb.from('requests').update({status:'Complacida',complacida_at:new Date().toISOString()}).eq('id',id);refresh()}
 async function addSong(){
+ const sn=document.getElementById('sn'), st=document.getElementById('st'), sc=document.getElementById('sc'), sl=document.getElementById('sl');
  const {error}=await sb.from('songs').insert({name:sn.value.trim(),tone:st.value.trim(),category:sc.value.trim()||'Norteñas',lyrics:sl.value});
  if(error)alert(error.message); else {sn.value=st.value=sc.value=sl.value='';refresh()}
 }
