@@ -49,11 +49,6 @@
       <div class="toolbar"><input id="stSearch" type="search" placeholder="Buscar canción..."><select id="stCat"></select></div>
       <div id="ranking"></div>
     </div>
-    <div class="two">
-      <div class="card"><b>🎶 Por género</b><div class="bars" id="byCat"></div></div>
-      <div class="card"><b>🕒 Peticiones por hora</b><div class="cols" id="byHour"></div></div>
-    </div>
-    <div class="card"><b>📅 Últimos 7 días</b><div class="cols" id="byDay"></div></div>
     <div class="card"><b>💤 Sin ninguna petición</b><div class="muted small" id="never"></div></div>
   </div>
 
@@ -204,17 +199,6 @@ function renderStats(){
     <div class="bars"><div class="row" style="margin:4px 0"><span class="track"><span class="fill" style="display:block;width:${s.n/max*100}%"></span></span></div></div>
     <div class="muted small">${esc(s.cat)} · <span class="pill d">${s.done} ✓</span> <span class="pill p">${s.pend} ⏳</span> · última: ${fmt(s.last)}</div></div>`).join(''):'<div class="muted small" style="margin-top:8px">Sin peticiones en este periodo.</div>';
 
-  // por género
-  const bc=new Map(); rs.forEach(r=>{const c=r.songs?.category||'Otras'; bc.set(c,(bc.get(c)||0)+1)});
-  const bcRows=[...bc.entries()].sort((a,b)=>b[1]-a[1]);
-  $('byCat').innerHTML=bars(bcRows,bcRows[0]?.[1]);
-  // por hora
-  const hrs=Array(24).fill(0); rs.forEach(r=>hrs[new Date(r.created_at).getHours()]++);
-  const first=hrs.findIndex(v=>v>0), last=hrs.length-1-[...hrs].reverse().findIndex(v=>v>0);
-  $('byHour').innerHTML=first<0?'<div class="muted small">Sin datos</div>':cols(hrs.map((v,h)=>[String(h).padStart(2,'0'),v]).slice(first,last+1));
-  // últimos 7 días (siempre sobre todas las peticiones)
-  const days=[]; for(let i=6;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);days.push(d)}
-  $('byDay').innerHTML=cols(days.map(d=>[d.toLocaleDateString('es-MX',{weekday:'short'}).slice(0,3)+' '+d.getDate(),requests.filter(r=>new Date(r.created_at).toDateString()===d.toDateString()).length]));
   // nunca pedidas
   const asked=new Set(requests.map(r=>r.song_id)); const never=songs.filter(s=>s.active&&!asked.has(s.id));
   $('never').textContent=never.length?`${never.length} de ${songs.filter(s=>s.active).length} canciones activas: `+never.slice(0,40).map(s=>s.name).join(' · ')+(never.length>40?' …':''):'Todas las canciones activas se han pedido al menos una vez 🎉';
