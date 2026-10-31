@@ -6,7 +6,7 @@ window.BARAJA_CONFIG = {
 
   // Contacto (deja "" para ocultar el botón)
   // WhatsApp: 52 + número a 10 dígitos, sin espacios ni signos. Ej. "5216671234567" o "526671234567"
-  WHATSAPP: "",
+  WHATSAPP: "525523946861",
   WHATSAPP_MSG: "¡Hola! Vi el cancionero de Baraja Norteña y me gustaría contratarlos para un evento.\n\nTipo de evento: \nFecha: \nLugar: \nHorario: ",
-  FACEBOOK: ""   // Ej. "https://www.facebook.com/barajanortena"
+  FACEBOOK: "https://www.facebook.com/jestebancastroj5523946861"   // Ej. "https://www.facebook.com/barajanortena"
 };
