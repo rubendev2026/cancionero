@@ -2,56 +2,176 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#171512">
 <title>Baraja Norteña — Pide tu canción</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
-<style>
-body{font-family:Arial,sans-serif;margin:0;background:#111;color:#fff}
-header{padding:20px;background:#171717;text-align:center;position:sticky;top:0}
-h1{margin:0;font-size:24px}.sub{color:#ddd;margin-top:5px}
-main{max-width:760px;margin:auto;padding:16px}
-input,textarea,button,select{width:100%;box-sizing:border-box;padding:13px;margin:7px 0;border-radius:10px;border:0;font-size:16px}
-input,textarea,select{background:#fff;color:#111}button{background:#d6a52c;color:#111;font-weight:bold}
-.card{background:#202020;border-radius:14px;padding:14px;margin:10px 0}.muted{color:#bbb}
-.small{font-size:13px}
-</style>
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<header><h1>BARAJA NORTEÑA</h1><div class="sub">Tú eliges la canción, nosotros la tocamos en vivo</div></header>
+<header class="top" id="top">
+  <div class="wrap">
+    <div class="brand"><h1>BARAJA NORTEÑA</h1><span class="sub">Tú eliges, nosotros tocamos en vivo</span></div>
+    <div class="search" id="searchBox">
+      <label class="sr" for="search">Buscar canción</label>
+      <input id="search" type="search" placeholder="🔎 Buscar canción..." autocomplete="off">
+      <button class="x" id="clear" aria-label="Borrar búsqueda">✕</button>
+    </div>
+    <div class="chips" id="chips" role="tablist" aria-label="Filtros rápidos"></div>
+  </div>
+</header>
+
 <main>
-<input id="search" placeholder="🔎 Buscar canción..." oninput="render()">
-<div id="status" class="muted">Cargando repertorio...</div>
-<div id="list"></div>
+  <div id="topBox"></div>
+  <div class="meta"><span id="status">Cargando repertorio...</span><button id="reset" style="display:none">Quitar filtros</button></div>
+  <div id="list" class="songs"></div>
 </main>
+
+<nav class="az" id="az" aria-label="Ir a letra"></nav>
+<button class="fab" id="fab" aria-label="Volver arriba">↑</button>
+
+<div class="scrim" id="scrim" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+  <form class="sheet" id="form" autocomplete="off">
+    <h3 id="mTitle">Pedir canción</h3>
+    <div class="muted small" id="mSong"></div>
+    <label for="fName">Tu nombre (opcional)</label>
+    <input id="fName" maxlength="60" placeholder="Ej. Carlos">
+    <label for="fDedi">Dedicatoria o mensaje (opcional)</label>
+    <textarea id="fDedi" rows="3" maxlength="200" placeholder="Para mi esposa, felicidades a Pedro..."></textarea>
+    <div class="actions">
+      <button type="button" class="btn ghost" id="cancel">Cancelar</button>
+      <button type="submit" class="btn" id="send">🎤 Enviar petición</button>
+    </div>
+  </form>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
 <script>
+(function(){
+const $=id=>document.getElementById(id);
 const cfg=window.BARAJA_CONFIG||{};
 let sb=null;
-if(window.supabase && cfg.SUPABASE_URL && cfg.SUPABASE_URL.startsWith('http') && cfg.SUPABASE_ANON_KEY && !cfg.SUPABASE_ANON_KEY.includes('PON_AQUI')){
-  try { sb=supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY); } catch(e){ console.error(e); }
+if(window.supabase && cfg.SUPABASE_URL && /^https?:/.test(cfg.SUPABASE_URL) && cfg.SUPABASE_ANON_KEY && !cfg.SUPABASE_ANON_KEY.includes('PON_AQUI')){
+  try{ sb=window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY); }catch(e){ console.error(e); }
 }
-let songs=[];
-async function load(){ 
- if(!sb){ document.getElementById('status').textContent="Falta conectar Supabase o recargar la página."; return; }
- const {data,error}=await sb.from('songs').select('id,name,category').eq('active',true).order('name');
- if(error){ document.getElementById('status').textContent=error.message; return; }
- songs=data||[]; render();
+const esc=x=>String(x==null?'':x).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+const norm=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim();
+const initial=s=>{const c=norm(s).charAt(0).toUpperCase();return /[A-Z]/.test(c)?c:'#'};
+
+let songs=[], cat='Todas', onlyTop=false, current=null, sending=false;
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+
+async function load(){
+  if(!sb){ $('status').textContent='Falta conectar Supabase o recargar la página.'; return; }
+  const {data,error}=await sb.from('songs').select('id,name,category,request_count').eq('active',true).order('name');
+  if(error){ $('status').textContent='No se pudo cargar: '+error.message; return; }
+  songs=data||[];
+  renderChips(); renderTop(); render();
+}
+
+function categories(){
+  const m=new Map(); songs.forEach(s=>{const c=s.category||'Otras'; m.set(c,(m.get(c)||0)+1)});
+  return [...m.entries()].sort((a,b)=>b[1]-a[1]);
+}
+function renderChips(){
+  const cs=categories();
+  const items=[['Todas',songs.length],...cs];
+  $('chips').innerHTML=items.map(([c,n])=>`<button class="chip ${!onlyTop&&cat===c?'on':''}" data-cat="${esc(c)}">${esc(c)}<b>${n}</b></button>`).join('')
+    +`<button class="chip ${onlyTop?'on':''}" data-top="1">🔥 Más pedidas</button>`;
+}
+$('chips').addEventListener('click',e=>{
+  const b=e.target.closest('.chip'); if(!b) return;
+  if(b.dataset.top){ onlyTop=!onlyTop; } else { cat=b.dataset.cat; onlyTop=false; }
+  renderChips(); render(); window.scrollTo({top:0});
+});
+
+function renderTop(){
+  const top=songs.filter(s=>s.request_count>0).sort((a,b)=>b.request_count-a.request_count).slice(0,5);
+  $('topBox').innerHTML=top.length?`<div class="top-box"><h2>🔥 Lo más pedido de la noche</h2>${top.map((s,i)=>`<div class="rank"><span class="n">${i+1}</span><span class="t">${esc(s.name)}</span><span class="c">${s.request_count} ${s.request_count===1?'vez':'veces'}</span></div>`).join('')}</div>`:'';
+}
+
+function filtered(){
+  const q=norm($('search').value);
+  let a=songs.filter(s=>(cat==='Todas'||(s.category||'Otras')===cat)&&(!q||norm(s.name).includes(q)));
+  if(onlyTop) a=a.filter(s=>s.request_count>0).sort((x,y)=>y.request_count-x.request_count||x.name.localeCompare(y.name,'es'));
+  return a;
+}
+function songHTML(s){
+  return `<div class="song"><div class="info"><div class="name">${esc(s.name)}</div><div class="cat"><span>${esc(s.category||'')}</span>${s.request_count>0?`<span class="badge">🔥 ${s.request_count}</span>`:''}</div></div><button class="btn" data-id="${esc(s.id)}">🎤 Pedir</button></div>`;
 }
 function render(){
- const q=document.getElementById('search').value.toLowerCase();
- const a=songs.filter(s=>s.name.toLowerCase().includes(q));
- document.getElementById('status').textContent=`${a.length} canciones disponibles`;
- document.getElementById('list').innerHTML=a.map(s=>`<div class="card"><b>${esc(s.name)}</b><div class="muted small">${esc(s.category||'')}</div><button onclick="ask('${s.id}')">🎤 PEDIR</button></div>`).join('');
+  const q=$('search').value;
+  $('searchBox').classList.toggle('has',!!q); setStick();
+  const a=filtered();
+  const filtering=!!q||cat!=='Todas'||onlyTop;
+  $('reset').style.display=filtering?'':'none';
+  $('status').textContent=`${a.length} ${a.length===1?'canción':'canciones'}${filtering?(a.length===1?' encontrada':' encontradas'):(a.length===1?' disponible':' disponibles')}`;
+  $('topBox').style.display=(filtering)?'none':'';
+  if(!a.length){ $('list').className=''; $('list').innerHTML='<div class="empty">😕 No encontramos esa canción.<br>Prueba con otra palabra o quita los filtros.</div>'; document.body.classList.remove('has-az'); $('az').innerHTML=''; return; }
+  $('list').className='';
+  if(onlyTop){ $('list').className='songs'; $('list').innerHTML=a.map(songHTML).join(''); document.body.classList.remove('has-az'); $('az').innerHTML=''; return; }
+  // Agrupar por letra para navegar rápido
+  const groups={}; a.forEach(s=>{(groups[initial(s.name)]=groups[initial(s.name)]||[]).push(s)});
+  const keys=Object.keys(groups).sort((x,y)=>x==='#'?1:y==='#'?-1:x.localeCompare(y));
+  $('list').innerHTML=keys.map(k=>`<div class="group-title" id="L-${k==='#'?'num':k}">${k}</div><div class="songs">${groups[k].map(songHTML).join('')}</div>`).join('');
+  document.body.classList.toggle('has-az',keys.length>3);
+  $('az').innerHTML=keys.length>3?keys.map(k=>`<button data-l="${k==='#'?'num':k}">${k}</button>`).join(''):'';
 }
-async function ask(id){
- const s=songs.find(x=>x.id===id);
- const name=prompt(`Canción: ${s.name}\n\nTu nombre (opcional):`); if(name===null)return;
- const dedication=prompt('Dedicatoria, felicitación o mensaje (opcional):'); if(dedication===null)return;
- const {error}=await sb.rpc('register_request',{p_song_id:id,p_requester_name:name.trim(),p_dedication:dedication.trim()});
- if(error) alert(error.message); else alert('¡Petición enviada! 🎤');
+$('az').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  const el=$('L-'+b.dataset.l); if(!el) return;
+  const h=$('top').offsetHeight;
+  window.scrollTo({top:el.getBoundingClientRect().top+window.scrollY-h-6});
+});
+
+// Búsqueda con pequeño retardo para fluidez en celulares
+let t; $('search').addEventListener('input',()=>{clearTimeout(t);t=setTimeout(render,120)});
+$('clear').onclick=()=>{$('search').value='';render();$('search').focus()};
+$('reset').onclick=()=>{$('search').value='';cat='Todas';onlyTop=false;renderChips();render();window.scrollTo({top:0})};
+
+// Botón volver arriba
+window.addEventListener('scroll',()=>$('fab').classList.toggle('show',window.scrollY>600),{passive:true});
+$('fab').onclick=()=>window.scrollTo({top:0});
+
+// Modal de petición
+$('list').addEventListener('click',e=>{
+  const b=e.target.closest('button[data-id]'); if(!b) return;
+  current=songs.find(s=>s.id===b.dataset.id); if(!current) return;
+  $('mSong').textContent='🎵 '+current.name;
+  $('fName').value=store.get('baraja_name')||'';
+  $('fDedi').value='';
+  $('scrim').classList.add('open'); setTimeout(()=>$($('fName').value?'fDedi':'fName').focus(),50);
+});
+function closeModal(){ $('scrim').classList.remove('open'); current=null; }
+$('cancel').onclick=closeModal;
+$('scrim').addEventListener('click',e=>{ if(e.target===$('scrim')) closeModal(); });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeModal(); });
+
+$('form').addEventListener('submit',async e=>{
+  e.preventDefault(); if(sending||!current||!sb) return;
+  sending=true; $('send').disabled=true; $('send').textContent='Enviando...';
+  const name=$('fName').value.trim(), dedi=$('fDedi').value.trim(), song=current;
+  const {error}=await sb.rpc('register_request',{p_song_id:song.id,p_requester_name:name,p_dedication:dedi});
+  sending=false; $('send').disabled=false; $('send').textContent='🎤 Enviar petición';
+  if(error){ toast('No se pudo enviar: '+error.message,true); return; }
+  if(name) store.set('baraja_name',name);
+  song.request_count=(song.request_count||0)+1;
+  closeModal(); renderTop(); render();
+  toast('¡Petición enviada! 🎤 '+song.name);
+});
+
+let tt; function toast(msg,err){
+  const el=$('toast'); el.textContent=msg; el.className='toast show'+(err?' err':'');
+  clearTimeout(tt); tt=setTimeout(()=>el.className='toast',3200);
 }
-function esc(x){return (x||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+
+// Ajusta el encabezado de las letras al alto real del header fijo
+function setStick(){ document.documentElement.style.setProperty('--stick',$('top').offsetHeight+'px'); }
+window.addEventListener('resize',setStick); setStick();
+
 load();
+})();
 </script>
 </body>
 </html>

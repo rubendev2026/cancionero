@@ -1,17 +1,24 @@
-# Baraja Norteña — Sistema de peticiones 1.0
+# Baraja Norteña — Sistema de peticiones 2.0
 
-Este proyecto está preparado para conectarse a Supabase y funcionar entre varios celulares.
+Sitio 100% estático (HTML + CSS + JS, sin compilar): se publica tal cual en **GitHub Pages**
+y se conecta a Supabase desde el navegador.
 
 ## Archivos
-- `index.html`: catálogo público.
-- `admin.html`: panel privado.
-- `supabase.sql`: crea las tablas y políticas de seguridad.
-- `config.js`: aquí se colocan la URL del proyecto y la clave anon de Supabase.
+- `index.html`: catálogo público (búsqueda, filtros rápidos por género, 🔥 más pedidas, barra A–Z, petición en ventana emergente).
+- `admin.html`: panel privado con 3 pestañas: **Peticiones**, **Estadísticas** y **Repertorio**.
+- `styles.css`: estilos compartidos.
+- `supabase.sql`: tablas, políticas de seguridad y función `register_request`.
+- `config.js`: URL del proyecto y clave pública `anon` de Supabase.
 
-## Flujo
-QR -> catálogo -> canción -> nombre/dedicatoria -> enviar -> panel privado -> COMPLACIDA.
+## Publicar en GitHub Pages
+Sube todos los archivos a la raíz del repositorio > Settings > Pages > Deploy from a branch > `main` / root.
+No requiere cambios en la base de datos: la versión 2.0 usa las mismas tablas y funciones.
 
-No existe estado "Tocar" ni "Terminada".
+## Estadísticas (admin)
+Filtros: Todo / Hoy / 7 días / 30 días. Incluye peticiones totales, canciones distintas, pendientes,
+tiempo promedio de atención, ranking por canción (veces pedida, complacidas, pendientes, última vez;
+toca una canción para ver quién la pidió y con qué dedicatoria), peticiones por género, por hora,
+últimos 7 días y canciones que nunca se han pedido.
 
 ## Importante
 No uses una clave `service_role` en las páginas. Solo la clave pública `anon`.

@@ -2,119 +2,275 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#171512">
+<meta name="robots" content="noindex,nofollow">
 <title>Baraja Norteña — Administración</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
-<style>
-body{font-family:Arial,sans-serif;margin:0;background:#101010;color:#fff}
-header{padding:18px;background:#181818;position:sticky;top:0;z-index:2}
-main{max-width:900px;margin:auto;padding:14px}.grid{display:grid;gap:12px}
-.card{background:#202020;border-radius:14px;padding:14px;margin:9px 0}
-input,textarea,button{width:100%;box-sizing:border-box;padding:12px;margin:5px 0;border-radius:9px;border:0;font-size:16px}
-input,textarea{background:#fff;color:#111}button{background:#d6a52c;font-weight:bold}
-.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}.muted{color:#aaa}.ok{color:#75e09a}
-</style>
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<header><b>🎤 BARAJA NORTEÑA — ADMIN</b></header>
+<header class="top"><div class="wrap">
+  <div class="brand"><h1>🎤 ADMIN</h1><span class="sub" id="liveTag"></span></div>
+</div></header>
+
 <main>
-<section id="login">
-<h2>Acceso privado</h2>
-<input id="email" type="email" placeholder="Correo">
-<input id="password" type="password" placeholder="Contraseña">
-<button onclick="login()">ENTRAR</button>
-<div id="msg" class="muted"></div>
+<section id="login" class="login">
+  <h2>Acceso privado</h2>
+  <form id="loginForm">
+    <input id="email" type="email" placeholder="Correo" autocomplete="username" required>
+    <input id="password" type="password" placeholder="Contraseña" autocomplete="current-password" required>
+    <button class="btn" type="submit">ENTRAR</button>
+  </form>
+  <div id="msg" class="muted small" style="margin-top:8px"></div>
 </section>
+
 <section id="app" style="display:none">
-<button onclick="logout()">Cerrar sesión</button>
-<h2>📥 Peticiones</h2><div id="stats"></div><div id="requests"></div>
-<h2>🎵 Repertorio</h2>
-<div class="card">
-<input id="sn" placeholder="Nombre de la canción">
-<input id="st" placeholder="Tono">
-<input id="sc" placeholder="Categoría">
-<textarea id="sl" rows="5" placeholder="Letra (solo para tu uso privado)"></textarea>
-<button onclick="addSong()">AGREGAR CANCIÓN</button>
-</div>
-<div id="songs"></div>
+  <div class="tabs" id="tabs">
+    <button class="chip on" data-tab="req">📥 Peticiones <b id="pendCount"></b></button>
+    <button class="chip" data-tab="stats">📊 Estadísticas</button>
+    <button class="chip" data-tab="songs">🎵 Repertorio</button>
+  </div>
+
+  <!-- Peticiones -->
+  <div id="tab-req">
+    <div class="chips" id="reqChips"></div>
+    <div class="toolbar"><input id="reqSearch" type="search" placeholder="Buscar por canción, nombre o dedicatoria..."></div>
+    <div id="requests"></div>
+  </div>
+
+  <!-- Estadísticas -->
+  <div id="tab-stats" style="display:none">
+    <div class="chips" id="rangeChips"></div>
+    <div class="kpis" id="kpis"></div>
+    <div class="card"><b>🏆 Canciones más pedidas</b>
+      <div class="toolbar"><input id="stSearch" type="search" placeholder="Buscar canción..."><select id="stCat"></select></div>
+      <div id="ranking"></div>
+    </div>
+    <div class="two">
+      <div class="card"><b>🎶 Por género</b><div class="bars" id="byCat"></div></div>
+      <div class="card"><b>🕒 Peticiones por hora</b><div class="cols" id="byHour"></div></div>
+    </div>
+    <div class="card"><b>📅 Últimos 7 días</b><div class="cols" id="byDay"></div></div>
+    <div class="card"><b>💤 Sin ninguna petición</b><div class="muted small" id="never"></div></div>
+  </div>
+
+  <!-- Repertorio -->
+  <div id="tab-songs" style="display:none">
+    <div class="toolbar">
+      <input id="spSearch" type="search" placeholder="Buscar en el repertorio...">
+      <select id="spCat"></select>
+      <button class="btn" id="newSong">+ Agregar canción</button>
+    </div>
+    <div class="meta"><span id="spCount"></span></div>
+    <div id="songs"></div>
+  </div>
+
+  <div style="margin-top:20px"><button class="btn ghost" id="logout">Cerrar sesión</button></div>
 </section>
 </main>
+
+<!-- Modal genérico -->
+<div class="scrim" id="scrim" role="dialog" aria-modal="true"><div class="sheet" id="sheet"></div></div>
+<div class="toast" id="toast" role="status"></div>
+
 <script>
+(function(){
+const $=id=>document.getElementById(id);
 const cfg=window.BARAJA_CONFIG||{};
 let sb=null;
-if(window.supabase && cfg.SUPABASE_URL && cfg.SUPABASE_URL.startsWith('http') && cfg.SUPABASE_ANON_KEY && !cfg.SUPABASE_ANON_KEY.includes('PON_AQUI')){
-  try { sb=supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY); } catch(e){ console.error(e); }
+if(window.supabase && cfg.SUPABASE_URL && /^https?:/.test(cfg.SUPABASE_URL) && cfg.SUPABASE_ANON_KEY && !cfg.SUPABASE_ANON_KEY.includes('PON_AQUI')){
+  try{ sb=window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY); }catch(e){ console.error(e); }
 }
-let songs=[], requests=[];
-async function login(){
- const msgEl = document.getElementById('msg');
- if(!sb){ msgEl.textContent="Falta configurar o recargar config.js con la URL y clave válidas."; return; }
- const emailVal = document.getElementById('email').value.trim();
- const passVal = document.getElementById('password').value;
- const {error}=await sb.auth.signInWithPassword({email:emailVal, password:passVal});
- msgEl.textContent=error?error.message:'';
- if(!error) start();
-}
+const esc=x=>String(x==null?'':x).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+const norm=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim();
+const fmt=d=>new Date(d).toLocaleString('es-MX',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+const dur=ms=>{const m=Math.round(ms/60000);return m<1?'< 1 min':m<60?m+' min':Math.floor(m/60)+' h '+(m%60)+' min'};
+
+let songs=[], requests=[], tab='req', reqFilter='Pendiente', range='all', subscribed=false;
+
+/* ---------- Sesión ---------- */
+$('loginForm').addEventListener('submit',async e=>{
+  e.preventDefault();
+  if(!sb){ $('msg').textContent='Falta configurar o recargar config.js con la URL y clave válidas.'; return; }
+  const {error}=await sb.auth.signInWithPassword({email:$('email').value.trim(),password:$('password').value});
+  $('msg').textContent=error?error.message:''; if(!error) start();
+});
+$('logout').onclick=async()=>{await sb.auth.signOut();location.reload()};
 async function start(){
- document.getElementById('login').style.display='none';
- document.getElementById('app').style.display='block';
- await refresh();
- subscribe();
+  $('login').style.display='none'; $('app').style.display='block';
+  await refresh(); subscribe();
 }
-async function logout(){await sb.auth.signOut();location.reload()}
 async function refresh(){
- let a=await sb.from('songs').select('*').order('request_count',{ascending:false}); songs=a.data||[];
- let r=await sb.from('requests').select('*,songs(name)').order('created_at',{ascending:false}); requests=r.data||[];
- render();
-}
-function render(){
- const pending=requests.filter(r=>r.status==='Pendiente');
- const done=requests.filter(r=>r.status==='Complacida');
- document.getElementById('stats').innerHTML=`<div class="card"><b>${requests.length}</b> peticiones · <b>${done.length}</b> complacidas · <b>${pending.length}</b> pendientes</div>`;
- requestsEl();
- songsEl();
-}
-function requestsEl(){
- document.getElementById('requests').innerHTML=requests.map(r=>`<div class="card">
-<b>${esc(r.songs?.name||'')}</b><br>
-<span class="muted">${esc(r.requester_name||'')} ${r.dedication?'· '+esc(r.dedication):''}</span><br>
-<small>${new Date(r.created_at).toLocaleString('es-MX')} · ${esc(r.status)}</small>
-${r.status==='Pendiente'?`<button onclick="complete('${r.id}')">✓ COMPLACIDA</button>`:''}
-</div>`).join('');
-}
-function songsEl(){
- document.getElementById('songs').innerHTML=songs.map(s=>`<div class="card">
-<b>${esc(s.name)}</b> · ${s.request_count} peticiones<br>
-<span class="muted">${esc(s.category)} · tono: ${esc(s.tone)}</span>
-<button onclick="viewSong('${s.id}')">VER NOMBRE · TONO · LETRA</button>
-<div class="row"><button onclick="toggleSong('${s.id}',${!s.active})">${s.active?'DESACTIVAR':'ACTIVAR'}</button><button onclick="editSong('${s.id}')">EDITAR</button></div>
-</div>`).join('');
-}
-async function complete(id){await sb.from('requests').update({status:'Complacida',complacida_at:new Date().toISOString()}).eq('id',id);refresh()}
-async function addSong(){
- const sn=document.getElementById('sn'), st=document.getElementById('st'), sc=document.getElementById('sc'), sl=document.getElementById('sl');
- const {error}=await sb.from('songs').insert({name:sn.value.trim(),tone:st.value.trim(),category:sc.value.trim()||'Norteñas',lyrics:sl.value});
- if(error)alert(error.message); else {sn.value=st.value=sc.value=sl.value='';refresh()}
-}
-async function toggleSong(id,val){await sb.from('songs').update({active:val}).eq('id',id);refresh()}
-async function editSong(id){
- const s=songs.find(x=>x.id===id); if(!s)return;
- const name=prompt('Nombre',s.name); if(name===null)return;
- const tone=prompt('Tono',s.tone||''); if(tone===null)return;
- const cat=prompt('Categoría',s.category||''); if(cat===null)return;
- const lyrics=prompt('Letra',s.lyrics||''); if(lyrics===null)return;
- await sb.from('songs').update({name,tone,category:cat,lyrics}).eq('id',id);refresh();
-}
-function viewSong(id){
- const s=songs.find(x=>x.id===id);
- alert(`NOMBRE: ${s.name}\nTONO: ${s.tone||''}\n\nLETRA:\n${s.lyrics||''}`);
+  const a=await sb.from('songs').select('*').order('name');
+  const r=await sb.from('requests').select('*,songs(name,category)').order('created_at',{ascending:false});
+  if(a.error||r.error){ toast((a.error||r.error).message,true); return; }
+  songs=a.data||[]; requests=r.data||[]; renderAll();
 }
 function subscribe(){
- sb.channel('requests-live').on('postgres_changes',{event:'*',schema:'public',table:'requests'},()=>refresh()).subscribe();
+  if(subscribed) return; subscribed=true;
+  sb.channel('requests-live').on('postgres_changes',{event:'*',schema:'public',table:'requests'},()=>refresh())
+    .subscribe(s=>{ $('liveTag').innerHTML=s==='SUBSCRIBED'?'<span class="live"></span>En vivo':''; });
 }
-function esc(x){return (x||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
-if(sb) sb.auth.getSession().then(({data})=>{if(data?.session)start()});
+
+/* ---------- Pestañas ---------- */
+$('tabs').addEventListener('click',e=>{
+  const b=e.target.closest('.chip'); if(!b) return; tab=b.dataset.tab;
+  document.querySelectorAll('#tabs .chip').forEach(c=>c.classList.toggle('on',c===b));
+  ['req','stats','songs'].forEach(t=>$('tab-'+t).style.display=t===tab?'':'none');
+  window.scrollTo({top:0});
+});
+function renderAll(){
+  const p=requests.filter(r=>r.status==='Pendiente').length;
+  $('pendCount').textContent=p||'';
+  renderReqChips(); renderRequests(); renderStats(); renderSongs();
+}
+
+/* ---------- Peticiones ---------- */
+function renderReqChips(){
+  const p=requests.filter(r=>r.status==='Pendiente').length, d=requests.length-p;
+  const items=[['Pendiente','⏳ Pendientes',p],['Complacida','✅ Complacidas',d],['Todas','Todas',requests.length]];
+  $('reqChips').innerHTML=items.map(([k,l,n])=>`<button class="chip ${reqFilter===k?'on':''}" data-f="${k}">${l}<b>${n}</b></button>`).join('');
+}
+$('reqChips').addEventListener('click',e=>{const b=e.target.closest('.chip');if(!b)return;reqFilter=b.dataset.f;renderReqChips();renderRequests()});
+$('reqSearch').addEventListener('input',renderRequests);
+function renderRequests(){
+  const q=norm($('reqSearch').value);
+  let a=requests.filter(r=>reqFilter==='Todas'||r.status===reqFilter);
+  if(q) a=a.filter(r=>norm((r.songs?.name||'')+' '+r.requester_name+' '+r.dedication).includes(q));
+  // Las pendientes: la más antigua primero (orden de atención); el resto: más reciente primero
+  if(reqFilter==='Pendiente') a=[...a].reverse();
+  $('requests').innerHTML=a.length?a.map(r=>`<div class="card req"><div class="head"><div><b>${esc(r.songs?.name||'(canción eliminada)')}</b><div class="muted small">${esc(r.songs?.category||'')}</div></div><span class="pill ${r.status==='Pendiente'?'p':'d'}">${esc(r.status)}</span></div>
+    ${r.requester_name?`<div style="margin-top:6px">👤 ${esc(r.requester_name)}</div>`:''}
+    ${r.dedication?`<div class="dedi">${esc(r.dedication)}</div>`:''}
+    <div class="muted small">${fmt(r.created_at)}${r.complacida_at?' · atendida en '+dur(new Date(r.complacida_at)-new Date(r.created_at)):''}</div>
+    ${r.status==='Pendiente'?`<button class="btn ok" style="width:100%;margin-top:8px;padding:13px" data-done="${r.id}">✓ COMPLACIDA</button>`:`<button class="btn ghost sm" style="margin-top:8px" data-undo="${r.id}">Regresar a pendiente</button>`}</div>`).join(''):'<div class="empty">Sin peticiones aquí 🎶</div>';
+}
+$('requests').addEventListener('click',async e=>{
+  const d=e.target.closest('[data-done]'), u=e.target.closest('[data-undo]');
+  if(d){ d.disabled=true; const {error}=await sb.from('requests').update({status:'Complacida',complacida_at:new Date().toISOString()}).eq('id',d.dataset.done); if(error)toast(error.message,true); refresh(); }
+  if(u){ u.disabled=true; const {error}=await sb.from('requests').update({status:'Pendiente',complacida_at:null}).eq('id',u.dataset.undo); if(error)toast(error.message,true); refresh(); }
+});
+
+/* ---------- Estadísticas ---------- */
+const RANGES=[['all','Todo'],['today','Hoy'],['7','7 días'],['30','30 días']];
+$('rangeChips').innerHTML=RANGES.map(([k,l])=>`<button class="chip ${range===k?'on':''}" data-r="${k}">${l}</button>`).join('');
+$('rangeChips').addEventListener('click',e=>{const b=e.target.closest('.chip');if(!b)return;range=b.dataset.r;
+  document.querySelectorAll('#rangeChips .chip').forEach(c=>c.classList.toggle('on',c===b));renderStats()});
+$('stSearch').addEventListener('input',renderStats); $('stCat').addEventListener('change',renderStats);
+
+function inRange(r){
+  if(range==='all') return true;
+  const t=new Date(r.created_at), now=new Date();
+  if(range==='today'){ return t.toDateString()===now.toDateString(); }
+  return now-t<=Number(range)*86400000;
+}
+function bars(rows,max){ return rows.map(([l,v])=>`<div class="row"><span class="lab" title="${esc(l)}">${esc(l)}</span><span class="track"><span class="fill" style="display:block;width:${max?Math.max(2,v/max*100):0}%"></span></span><span class="val">${v}</span></div>`).join('')||'<div class="muted small">Sin datos</div>'; }
+function cols(rows){ const max=Math.max(1,...rows.map(r=>r[1])); return rows.map(([l,v])=>`<div class="col" title="${l}: ${v}"><i style="height:${v/max*85}%"></i><span>${l}</span></div>`).join(''); }
+
+function songStats(rs){
+  const m=new Map();
+  rs.forEach(r=>{
+    const id=r.song_id; const s=m.get(id)||{id,name:r.songs?.name||'(eliminada)',cat:r.songs?.category||'',n:0,done:0,pend:0,last:null,waits:[]};
+    s.n++; r.status==='Complacida'?s.done++:s.pend++;
+    if(!s.last||new Date(r.created_at)>new Date(s.last)) s.last=r.created_at;
+    if(r.complacida_at) s.waits.push(new Date(r.complacida_at)-new Date(r.created_at));
+    m.set(id,s);
+  });
+  return [...m.values()].sort((a,b)=>b.n-a.n||a.name.localeCompare(b.name,'es'));
+}
+function renderStats(){
+  const rs=requests.filter(inRange);
+  const all=songStats(rs);
+  const done=rs.filter(r=>r.status==='Complacida'), waits=done.filter(r=>r.complacida_at).map(r=>new Date(r.complacida_at)-new Date(r.created_at));
+  const avg=waits.length?waits.reduce((a,b)=>a+b,0)/waits.length:null;
+  const top=all[0];
+  $('kpis').innerHTML=[
+    [rs.length,'Peticiones'],[all.length,'Canciones distintas'],
+    [rs.length-done.length,'Pendientes'],[avg==null?'—':dur(avg),'Tiempo prom. de atención']
+  ].map(([v,l])=>`<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
+
+  // filtro de género
+  const cats=[...new Set(songs.map(s=>s.category||'Otras'))].sort();
+  const cur=$('stCat').value||'';
+  $('stCat').innerHTML='<option value="">Todos los géneros</option>'+cats.map(c=>`<option ${c===cur?'selected':''}>${esc(c)}</option>`).join('');
+  const q=norm($('stSearch').value), cf=$('stCat').value;
+  const list=all.filter(s=>(!cf||(s.cat||'Otras')===cf)&&(!q||norm(s.name).includes(q)));
+  const max=list[0]?.n||1;
+  $('ranking').innerHTML=list.length?list.slice(0,50).map((s,i)=>`<div class="card stat-song" data-song="${s.id}" style="margin:6px 0;padding:10px 12px">
+    <div style="display:flex;justify-content:space-between;gap:8px"><b>${i+1}. ${esc(s.name)}</b><b style="color:var(--gold2)">${s.n}</b></div>
+    <div class="bars"><div class="row" style="margin:4px 0"><span class="track"><span class="fill" style="display:block;width:${s.n/max*100}%"></span></span></div></div>
+    <div class="muted small">${esc(s.cat)} · <span class="pill d">${s.done} ✓</span> <span class="pill p">${s.pend} ⏳</span> · última: ${fmt(s.last)}</div></div>`).join(''):'<div class="muted small" style="margin-top:8px">Sin peticiones en este periodo.</div>';
+
+  // por género
+  const bc=new Map(); rs.forEach(r=>{const c=r.songs?.category||'Otras'; bc.set(c,(bc.get(c)||0)+1)});
+  const bcRows=[...bc.entries()].sort((a,b)=>b[1]-a[1]);
+  $('byCat').innerHTML=bars(bcRows,bcRows[0]?.[1]);
+  // por hora
+  const hrs=Array(24).fill(0); rs.forEach(r=>hrs[new Date(r.created_at).getHours()]++);
+  const first=hrs.findIndex(v=>v>0), last=hrs.length-1-[...hrs].reverse().findIndex(v=>v>0);
+  $('byHour').innerHTML=first<0?'<div class="muted small">Sin datos</div>':cols(hrs.map((v,h)=>[String(h).padStart(2,'0'),v]).slice(first,last+1));
+  // últimos 7 días (siempre sobre todas las peticiones)
+  const days=[]; for(let i=6;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);days.push(d)}
+  $('byDay').innerHTML=cols(days.map(d=>[d.toLocaleDateString('es-MX',{weekday:'short'}).slice(0,3)+' '+d.getDate(),requests.filter(r=>new Date(r.created_at).toDateString()===d.toDateString()).length]));
+  // nunca pedidas
+  const asked=new Set(requests.map(r=>r.song_id)); const never=songs.filter(s=>s.active&&!asked.has(s.id));
+  $('never').textContent=never.length?`${never.length} de ${songs.filter(s=>s.active).length} canciones activas: `+never.slice(0,40).map(s=>s.name).join(' · ')+(never.length>40?' …':''):'Todas las canciones activas se han pedido al menos una vez 🎉';
+}
+$('ranking').addEventListener('click',e=>{
+  const c=e.target.closest('[data-song]'); if(!c) return;
+  const s=songs.find(x=>x.id===c.dataset.song); const rs=requests.filter(r=>r.song_id===c.dataset.song&&inRange(r));
+  openSheet(`<h3>${esc(s?.name||'Canción')}</h3><div class="muted small">${rs.length} peticiones</div>
+    <div style="margin-top:10px">${rs.map(r=>`<div class="card" style="margin:6px 0;padding:10px"><span class="pill ${r.status==='Pendiente'?'p':'d'}">${r.status}</span> <span class="muted small">${fmt(r.created_at)}</span><div>${r.requester_name?'👤 '+esc(r.requester_name):'<span class="muted">Anónimo</span>'}</div>${r.dedication?`<div class="dedi small" style="margin:6px 0;padding:6px 8px;background:#15130f;border-left:3px solid var(--gold)">${esc(r.dedication)}</div>`:''}</div>`).join('')}</div>
+    <div class="actions"><button class="btn ghost" data-close>Cerrar</button></div>`);
+});
+
+/* ---------- Repertorio ---------- */
+$('spSearch').addEventListener('input',renderSongs); $('spCat').addEventListener('change',renderSongs);
+$('newSong').onclick=()=>songForm();
+function renderSongs(){
+  const cats=[...new Set(songs.map(s=>s.category||'Otras'))].sort(); const cur=$('spCat').value||'';
+  $('spCat').innerHTML='<option value="">Todos los géneros</option>'+cats.map(c=>`<option ${c===cur?'selected':''}>${esc(c)}</option>`).join('');
+  const q=norm($('spSearch').value), cf=$('spCat').value;
+  const a=songs.filter(s=>(!cf||(s.category||'Otras')===cf)&&(!q||norm(s.name).includes(q)));
+  $('spCount').textContent=`${a.length} de ${songs.length} canciones`;
+  $('songs').innerHTML=a.map(s=>`<div class="card" style="${s.active?'':'opacity:.55'}">
+    <div style="display:flex;justify-content:space-between;gap:8px"><b>${esc(s.name)}</b><span class="badge">🔥 ${s.request_count}</span></div>
+    <div class="muted small">${esc(s.category)}${s.tone?' · tono: '+esc(s.tone):''}${s.active?'':' · INACTIVA'}</div>
+    <div class="toolbar" style="margin-bottom:0"><button class="btn ghost sm" data-view="${s.id}">Ver letra</button><button class="btn ghost sm" data-edit="${s.id}">Editar</button><button class="btn ghost sm" data-toggle="${s.id}">${s.active?'Desactivar':'Activar'}</button></div></div>`).join('')||'<div class="empty">Sin resultados</div>';
+}
+$('songs').addEventListener('click',async e=>{
+  const v=e.target.closest('[data-view]'), ed=e.target.closest('[data-edit]'), t=e.target.closest('[data-toggle]');
+  if(v){ const s=songs.find(x=>x.id===v.dataset.view); openSheet(`<h3>${esc(s.name)}</h3><div class="muted small">${esc(s.category)} · tono: ${esc(s.tone||'—')}</div><pre style="white-space:pre-wrap;font-family:inherit;margin-top:12px">${esc(s.lyrics||'Sin letra guardada.')}</pre><div class="actions"><button class="btn ghost" data-close>Cerrar</button></div>`); }
+  if(ed) songForm(songs.find(x=>x.id===ed.dataset.edit));
+  if(t){ const s=songs.find(x=>x.id===t.dataset.toggle); const {error}=await sb.from('songs').update({active:!s.active}).eq('id',s.id); if(error)toast(error.message,true); refresh(); }
+});
+function songForm(s){
+  const cats=[...new Set(songs.map(x=>x.category||'Otras'))].sort();
+  openSheet(`<h3>${s?'Editar canción':'Agregar canción'}</h3>
+    <label>Nombre</label><input id="fn" value="${esc(s?.name||'')}">
+    <label>Género / categoría</label><input id="fc" list="catlist" value="${esc(s?.category||'Norteñas')}"><datalist id="catlist">${cats.map(c=>`<option value="${esc(c)}">`).join('')}</datalist>
+    <label>Tono</label><input id="ft" value="${esc(s?.tone||'')}">
+    <label>Letra (solo para tu uso privado)</label><textarea id="fl" rows="6">${esc(s?.lyrics||'')}</textarea>
+    <div class="actions"><button class="btn ghost" data-close>Cancelar</button><button class="btn" id="fsave">Guardar</button></div>`);
+  $('fsave').onclick=async()=>{
+    const row={name:$('fn').value.trim(),category:$('fc').value.trim()||'Norteñas',tone:$('ft').value.trim(),lyrics:$('fl').value};
+    if(!row.name){ toast('Escribe el nombre',true); return; }
+    const {error}=s?await sb.from('songs').update(row).eq('id',s.id):await sb.from('songs').insert(row);
+    if(error){ toast(error.message,true); return; } closeSheet(); toast('Guardado ✓'); refresh();
+  };
+}
+
+/* ---------- Modal y avisos ---------- */
+function openSheet(html){ $('sheet').innerHTML=html; $('scrim').classList.add('open'); }
+function closeSheet(){ $('scrim').classList.remove('open'); }
+$('scrim').addEventListener('click',e=>{ if(e.target===$('scrim')||e.target.closest('[data-close]')) closeSheet(); });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeSheet(); });
+let tt; function toast(msg,err){ const el=$('toast'); el.textContent=msg; el.className='toast show'+(err?' err':''); clearTimeout(tt); tt=setTimeout(()=>el.className='toast',3000); }
+
+if(sb) sb.auth.getSession().then(({data})=>{ if(data&&data.session) start(); });
+})();
 </script>
 </body>
 </html>
