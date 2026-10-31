@@ -11,7 +11,7 @@
 <link rel="apple-touch-icon" href="favicon.png">
 <meta property="og:title" content="Baraja Norteña — Pide tu canción">
 <meta property="og:image" content="logo.webp">
-<link rel="stylesheet" href="styles.css?v=3">
+<link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
 <div class="hero">
@@ -30,6 +30,7 @@
 </header>
 
 <main>
+  <button class="suggest-cta" id="openSuggest">💡 ¿No está tu canción? <b>Sugiérela aquí</b></button>
   <div id="topBox"></div>
   <div class="meta"><span id="status">Cargando repertorio...</span><button id="reset" style="display:none">Quitar filtros</button></div>
   <div id="list" class="songs"></div>
@@ -49,6 +50,24 @@
     <div class="actions">
       <button type="button" class="btn ghost" id="cancel">Cancelar</button>
       <button type="submit" class="btn" id="send">🎤 Enviar petición</button>
+    </div>
+  </form>
+</div>
+<div class="scrim" id="sScrim" role="dialog" aria-modal="true" aria-labelledby="sTitle">
+  <form class="sheet" id="sForm" autocomplete="off">
+    <h3 id="sTitle">💡 Sugerir una canción</h3>
+    <div class="muted small">¿No la encontraste? Anótala y el grupo la preparará para un próximo evento.</div>
+    <label for="sName">Nombre de la canción *</label>
+    <input id="sName" maxlength="120" required placeholder="Ej. El Muchacho Alegre">
+    <label for="sArtist">Artista o grupo (opcional)</label>
+    <input id="sArtist" maxlength="120" placeholder="Ej. Los Invasores de Nuevo León">
+    <label for="sWho">Tu nombre (opcional)</label>
+    <input id="sWho" maxlength="60">
+    <label for="sNote">Comentario (opcional)</label>
+    <textarea id="sNote" rows="2" maxlength="200" placeholder="Ej. Para la boda de mi hija en diciembre"></textarea>
+    <div class="actions">
+      <button type="button" class="btn ghost" id="sCancel">Cancelar</button>
+      <button type="submit" class="btn" id="sSend">Enviar sugerencia</button>
     </div>
   </form>
 </div>
@@ -115,7 +134,7 @@ function render(){
   $('reset').style.display=filtering?'':'none';
   $('status').textContent=`${a.length} ${a.length===1?'canción':'canciones'}${filtering?(a.length===1?' encontrada':' encontradas'):(a.length===1?' disponible':' disponibles')}`;
   $('topBox').style.display=(filtering)?'none':'';
-  if(!a.length){ $('list').className=''; $('list').innerHTML='<div class="empty">😕 No encontramos esa canción.<br>Prueba con otra palabra o quita los filtros.</div>'; document.body.classList.remove('has-az'); $('az').innerHTML=''; return; }
+  if(!a.length){ $('list').className=''; $('list').innerHTML='<div class="empty">😕 No encontramos esa canción.<br>Prueba con otra palabra o quita los filtros.<br><br><button class="btn" data-suggest="1">💡 Sugerir esta canción</button></div>'; document.body.classList.remove('has-az'); $('az').innerHTML=''; return; }
   $('list').className='';
   if(onlyTop){ $('list').className='songs'; $('list').innerHTML=a.map(songHTML).join(''); document.body.classList.remove('has-az'); $('az').innerHTML=''; return; }
   // Agrupar por letra para navegar rápido
@@ -176,6 +195,31 @@ let tt; function toast(msg,err){
 // Ajusta el encabezado de las letras al alto real del header fijo
 function setStick(){ document.documentElement.style.setProperty('--stick',$('top').offsetHeight+'px'); }
 window.addEventListener('resize',setStick); setStick();
+
+// Sugerencias
+function openSuggest(){
+  $('sName').value=$('search').value.trim(); $('sArtist').value=''; $('sNote').value='';
+  $('sWho').value=store.get('baraja_name')||'';
+  $('sScrim').classList.add('open'); setTimeout(()=>$($('sName').value?'sArtist':'sName').focus(),50);
+}
+function closeSuggest(){ $('sScrim').classList.remove('open'); }
+$('openSuggest').onclick=openSuggest;
+$('list').addEventListener('click',e=>{ if(e.target.closest('[data-suggest]')) openSuggest(); });
+$('sCancel').onclick=closeSuggest;
+$('sScrim').addEventListener('click',e=>{ if(e.target===$('sScrim')) closeSuggest(); });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeSuggest(); });
+let sSending=false;
+$('sForm').addEventListener('submit',async e=>{
+  e.preventDefault(); if(sSending||!sb) return;
+  const row={name:$('sName').value.trim(),artist:$('sArtist').value.trim(),requester_name:$('sWho').value.trim(),note:$('sNote').value.trim()};
+  if(!row.name){ $('sName').focus(); return; }
+  sSending=true; $('sSend').disabled=true; $('sSend').textContent='Enviando...';
+  const {error}=await sb.from('song_suggestions').insert(row);
+  sSending=false; $('sSend').disabled=false; $('sSend').textContent='Enviar sugerencia';
+  if(error){ toast('No se pudo enviar: '+error.message,true); return; }
+  if(row.requester_name) store.set('baraja_name',row.requester_name);
+  closeSuggest(); toast('¡Gracias! El grupo revisará tu sugerencia 🎶');
+});
 
 load();
 })();

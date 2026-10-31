@@ -9,7 +9,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <link rel="icon" type="image/png" href="favicon.png">
-<link rel="stylesheet" href="styles.css?v=3">
+<link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
 <header class="top"><div class="wrap">
@@ -31,6 +31,7 @@
   <div class="tabs" id="tabs">
     <button class="chip on" data-tab="req">📥 Peticiones <b id="pendCount"></b></button>
     <button class="chip" data-tab="stats">📊 Estadísticas</button>
+    <button class="chip" data-tab="sug">💡 Por aprender <b id="sugCount"></b></button>
     <button class="chip" data-tab="songs">🎵 Repertorio</button>
   </div>
 
@@ -50,6 +51,13 @@
       <div id="ranking"></div>
     </div>
     <div class="card"><b>💤 Sin ninguna petición</b><div class="muted small" id="never"></div></div>
+  </div>
+
+  <!-- Sugerencias / por aprender -->
+  <div id="tab-sug" style="display:none">
+    <div class="chips" id="sugChips"></div>
+    <div class="toolbar"><input id="sugSearch" type="search" placeholder="Buscar canción o artista..."></div>
+    <div id="sugList"></div>
   </div>
 
   <!-- Repertorio -->
@@ -84,7 +92,7 @@ const norm=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase(
 const fmt=d=>new Date(d).toLocaleString('es-MX',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
 const dur=ms=>{const m=Math.round(ms/60000);return m<1?'< 1 min':m<60?m+' min':Math.floor(m/60)+' h '+(m%60)+' min'};
 
-let songs=[], requests=[], tab='req', reqFilter='Pendiente', range='all', subscribed=false;
+let songs=[], requests=[], sugs=[], sugFilter='Pendiente', tab='req', reqFilter='Pendiente', range='all', subscribed=false;
 
 /* ---------- Sesión ---------- */
 $('loginForm').addEventListener('submit',async e=>{
@@ -102,11 +110,15 @@ async function refresh(){
   const a=await sb.from('songs').select('*').order('name');
   const r=await sb.from('requests').select('*,songs(name,category)').order('created_at',{ascending:false});
   if(a.error||r.error){ toast((a.error||r.error).message,true); return; }
-  songs=a.data||[]; requests=r.data||[]; renderAll();
+  songs=a.data||[]; requests=r.data||[];
+  const g=await sb.from('song_suggestions').select('*').order('created_at',{ascending:false});
+  sugs=g.error?[]:(g.data||[]); if(g.error) console.warn('Sugerencias:',g.error.message);
+  renderAll();
 }
 function subscribe(){
   if(subscribed) return; subscribed=true;
   sb.channel('requests-live').on('postgres_changes',{event:'*',schema:'public',table:'requests'},()=>refresh())
+    .on('postgres_changes',{event:'*',schema:'public',table:'song_suggestions'},()=>refresh())
     .subscribe(s=>{ $('liveTag').innerHTML=s==='SUBSCRIBED'?'<span class="live"></span>En vivo':''; });
 }
 
@@ -114,13 +126,13 @@ function subscribe(){
 $('tabs').addEventListener('click',e=>{
   const b=e.target.closest('.chip'); if(!b) return; tab=b.dataset.tab;
   document.querySelectorAll('#tabs .chip').forEach(c=>c.classList.toggle('on',c===b));
-  ['req','stats','songs'].forEach(t=>$('tab-'+t).style.display=t===tab?'':'none');
+  ['req','stats','sug','songs'].forEach(t=>$('tab-'+t).style.display=t===tab?'':'none');
   window.scrollTo({top:0});
 });
 function renderAll(){
   const p=requests.filter(r=>r.status==='Pendiente').length;
   $('pendCount').textContent=p||'';
-  renderReqChips(); renderRequests(); renderStats(); renderSongs();
+  renderReqChips(); renderRequests(); renderStats(); renderSugs(); renderSongs();
 }
 
 /* ---------- Peticiones ---------- */
@@ -211,6 +223,53 @@ $('ranking').addEventListener('click',e=>{
     <div class="actions"><button class="btn ghost" data-close>Cerrar</button></div>`);
 });
 
+/* ---------- Sugerencias (por aprender) ---------- */
+$('sugSearch').addEventListener('input',renderSugs);
+$('sugChips').addEventListener('click',e=>{const b=e.target.closest('.chip');if(!b)return;sugFilter=b.dataset.f;renderSugs()});
+function renderSugs(){
+  // Agrupa sugerencias de la misma canción (sin importar mayúsculas/acentos)
+  const groups=new Map();
+  sugs.forEach(x=>{const k=norm(x.name); const g=groups.get(k)||{key:k,items:[]}; g.items.push(x); groups.set(k,g);});
+  const all=[...groups.values()].map(g=>{
+    const st=g.items.some(i=>i.status==='Pendiente')?'Pendiente':g.items.some(i=>i.status==='Aprendida')?'Aprendida':'Descartada';
+    const first=g.items[g.items.length-1];
+    return {...g,status:st,name:first.name,artist:(g.items.find(i=>i.artist)||{}).artist||'',last:g.items[0].created_at};
+  });
+  const cnt=k=>all.filter(g=>g.status===k).length;
+  $('sugCount').textContent=cnt('Pendiente')||'';
+  $('sugChips').innerHTML=[['Pendiente','⏳ Por aprender'],['Aprendida','✅ Aprendidas'],['Descartada','🗑 Descartadas']]
+    .map(([k,l])=>`<button class="chip ${sugFilter===k?'on':''}" data-f="${k}">${l}<b>${cnt(k)}</b></button>`).join('');
+  const q=norm($('sugSearch').value);
+  const list=all.filter(g=>g.status===sugFilter&&(!q||norm(g.name+' '+g.artist).includes(q)))
+    .sort((a,b)=>b.items.length-a.items.length||new Date(b.last)-new Date(a.last));
+  $('sugList').innerHTML=list.length?list.map(g=>`<div class="card">
+    <div style="display:flex;justify-content:space-between;gap:8px"><div><b>${esc(g.name)}</b>${g.artist?`<div class="muted small">🎤 ${esc(g.artist)}</div>`:''}</div><span class="badge">🙋 ${g.items.length}</span></div>
+    ${g.items.filter(i=>i.requester_name||i.note).slice(0,5).map(i=>`<div class="dedi small">${i.requester_name?'<b>'+esc(i.requester_name)+'</b> ':''}${esc(i.note)}</div>`).join('')}
+    <div class="muted small">Última vez: ${fmt(g.last)}</div>
+    <div class="toolbar" style="margin-bottom:0">${g.status==='Pendiente'
+      ?`<button class="btn ok sm" data-learn="${esc(g.key)}">✓ Ya la aprendimos</button><button class="btn ghost sm" data-discard="${esc(g.key)}">Descartar</button>`
+      :`<button class="btn ghost sm" data-reopen="${esc(g.key)}">Regresar a por aprender</button>`}
+    </div></div>`).join(''):'<div class="empty">Nada por aquí 🎶</div>';
+}
+async function setSug(key,status){
+  const ids=sugs.filter(x=>norm(x.name)===key).map(x=>x.id);
+  const {error}=await sb.from('song_suggestions').update({status}).in('id',ids);
+  if(error){ toast(error.message,true); return false; } return true;
+}
+$('sugList').addEventListener('click',async e=>{
+  const l=e.target.closest('[data-learn]'), d=e.target.closest('[data-discard]'), r=e.target.closest('[data-reopen]');
+  if(d){ if(await setSug(d.dataset.discard,'Descartada')){toast('Descartada');refresh();} }
+  if(r){ if(await setSug(r.dataset.reopen,'Pendiente')){refresh();} }
+  if(l){
+    const key=l.dataset.learn; const g=sugs.filter(x=>norm(x.name)===key);
+    const exists=songs.some(s=>norm(s.name)===key);
+    if(!exists){
+      // Abre el formulario de canción con el nombre ya escrito para agregarla al repertorio
+      songForm({name:g[g.length-1].name,category:'Norteñas y Rancheras',tone:'',lyrics:''},true,async()=>{ await setSug(key,'Aprendida'); });
+    } else if(await setSug(key,'Aprendida')){ toast('Marcada como aprendida ✓'); refresh(); }
+  }
+});
+
 /* ---------- Repertorio ---------- */
 $('spSearch').addEventListener('input',renderSongs); $('spCat').addEventListener('change',renderSongs);
 $('newSong').onclick=()=>songForm();
@@ -231,9 +290,9 @@ $('songs').addEventListener('click',async e=>{
   if(ed) songForm(songs.find(x=>x.id===ed.dataset.edit));
   if(t){ const s=songs.find(x=>x.id===t.dataset.toggle); const {error}=await sb.from('songs').update({active:!s.active}).eq('id',s.id); if(error)toast(error.message,true); refresh(); }
 });
-function songForm(s){
+function songForm(s,isNew,after){ const editing=s&&!isNew;
   const cats=[...new Set(songs.map(x=>x.category||'Otras'))].sort();
-  openSheet(`<h3>${s?'Editar canción':'Agregar canción'}</h3>
+  openSheet(`<h3>${editing?'Editar canción':'Agregar canción'}</h3>${isNew?'<div class="muted small">Se agregará al repertorio y se marcará como aprendida.</div>':''}
     <label>Nombre</label><input id="fn" value="${esc(s?.name||'')}">
     <label>Género / categoría</label><input id="fc" list="catlist" value="${esc(s?.category||'Norteñas')}"><datalist id="catlist">${cats.map(c=>`<option value="${esc(c)}">`).join('')}</datalist>
     <label>Tono</label><input id="ft" value="${esc(s?.tone||'')}">
@@ -242,8 +301,8 @@ function songForm(s){
   $('fsave').onclick=async()=>{
     const row={name:$('fn').value.trim(),category:$('fc').value.trim()||'Norteñas',tone:$('ft').value.trim(),lyrics:$('fl').value};
     if(!row.name){ toast('Escribe el nombre',true); return; }
-    const {error}=s?await sb.from('songs').update(row).eq('id',s.id):await sb.from('songs').insert(row);
-    if(error){ toast(error.message,true); return; } closeSheet(); toast('Guardado ✓'); refresh();
+    const {error}=editing?await sb.from('songs').update(row).eq('id',s.id):await sb.from('songs').insert(row);
+    if(error){ toast(error.message,true); return; } if(after) await after(); closeSheet(); toast('Guardado ✓'); refresh();
   };
 }
 
