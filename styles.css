@@ -126,3 +126,13 @@ main{max-width:900px;margin:auto;padding:12px 14px 90px}
 /* Ajustes móviles */
 @media(max-width:899px){body.has-az main{padding-right:26px}}
 .tabs .chip{padding:8px 6px;font-size:13px}
+
+/* Logo */
+.hero{background:#000;text-align:center;padding:10px 14px 12px;border-bottom:1px solid var(--line)}
+.hero h1{margin:0}
+.hero img{width:min(78vw,380px);height:auto;display:block;margin:0 auto}
+.hero p{margin:2px 0 0;color:var(--muted);font-size:13px}
+.brand h1 .mini{height:34px;width:auto;vertical-align:middle;margin-right:6px;background:#000;border-radius:6px}
+.brand h1{display:flex;align-items:center}
+.login::before{content:"";display:block;height:90px;background:url(logo.webp) center/contain no-repeat;margin-bottom:10px}
+.az{top:auto;bottom:80px;transform:none;max-height:calc(100vh - 270px);overflow-y:auto;z-index:22;scrollbar-width:none}

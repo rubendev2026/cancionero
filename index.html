@@ -7,12 +7,19 @@
 <title>Baraja Norteña — Pide tu canción</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="favicon.png">
+<meta property="og:title" content="Baraja Norteña — Pide tu canción">
+<meta property="og:image" content="logo.webp">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+<div class="hero">
+  <h1><img src="logo.webp" width="640" height="311" alt="Baraja Norteña — Esteban Castro" fetchpriority="high"></h1>
+  <p>Tú eliges la canción, nosotros la tocamos en vivo</p>
+</div>
 <header class="top" id="top">
   <div class="wrap">
-    <div class="brand"><h1>BARAJA NORTEÑA</h1><span class="sub">Tú eliges, nosotros tocamos en vivo</span></div>
     <div class="search" id="searchBox">
       <label class="sr" for="search">Buscar canción</label>
       <input id="search" type="search" placeholder="🔎 Buscar canción..." autocomplete="off">
