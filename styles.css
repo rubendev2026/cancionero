@@ -149,3 +149,13 @@ main{max-width:900px;margin:auto;padding:12px 14px 90px}
 .hero .slogan::before,.hero .slogan::after{content:"";flex:1 1 20px;max-width:60px;height:2px;background:linear-gradient(90deg,transparent,var(--gold));border-radius:2px}
 .hero .slogan::after{background:linear-gradient(270deg,transparent,var(--gold))}
 .hero .slogan span{flex:0 1 auto;text-align:center}
+
+/* Contacto: WhatsApp / Facebook */
+.social{display:flex;justify-content:center;gap:10px;margin:10px 0 2px;flex-wrap:wrap}
+.soc{display:inline-flex;align-items:center;gap:8px;padding:9px 16px;border-radius:999px;font-weight:700;font-size:14px;text-decoration:none;color:#fff;transition:transform .15s}
+.soc:active{transform:scale(.96)}
+.soc[hidden],.wa-float[hidden]{display:none}
+.soc.wa{background:#25d366;color:#06301a}
+.soc.fb{background:#1877f2}
+.wa-float{position:fixed;left:14px;bottom:18px;z-index:25;width:52px;height:52px;border-radius:50%;background:#25d366;color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.5)}
+.wa-float svg{width:28px;height:28px}
