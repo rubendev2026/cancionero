@@ -140,3 +140,12 @@ main{max-width:900px;margin:auto;padding:12px 14px 90px}
 /* Sugerir canción */
 .suggest-cta{width:100%;margin:2px 0 10px;padding:12px 14px;border-radius:var(--radius);border:1px dashed var(--gold);background:rgba(214,165,44,.08);color:var(--text);font-size:14px;cursor:pointer;text-align:center}
 .suggest-cta b{color:var(--gold2)}
+
+/* Slogan */
+.hero .slogan{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;margin:6px auto 2px;max-width:520px;
+  font-family:"Rye",Georgia,serif;font-size:clamp(15px,4.4vw,21px);letter-spacing:.5px;line-height:1.25;color:var(--gold2);
+  background:linear-gradient(180deg,#fff3c4 0%,#f0c75a 45%,#c98f1c 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  text-shadow:0 2px 0 rgba(0,0,0,.4)}
+.hero .slogan::before,.hero .slogan::after{content:"";flex:1 1 20px;max-width:60px;height:2px;background:linear-gradient(90deg,transparent,var(--gold));border-radius:2px}
+.hero .slogan::after{background:linear-gradient(270deg,transparent,var(--gold))}
+.hero .slogan span{flex:0 1 auto;text-align:center}
