@@ -33,7 +33,6 @@
 
 <main>
   <button class="suggest-cta" id="openSuggest">💡 ¿No está tu canción? <b>Sugiérela aquí</b></button>
-  <div id="topBox"></div>
   <div class="meta"><span id="status">Cargando repertorio...</span><button id="reset" style="display:none">Quitar filtros</button></div>
   <div id="list" class="songs"></div>
 </main>
@@ -95,7 +94,7 @@ async function load(){
   const {data,error}=await sb.from('songs').select('id,name,category,request_count').eq('active',true).order('name');
   if(error){ $('status').textContent='No se pudo cargar: '+error.message; return; }
   songs=data||[];
-  renderChips(); renderTop(); render();
+  renderChips(); render();
 }
 
 function categories(){
@@ -114,11 +113,6 @@ $('chips').addEventListener('click',e=>{
   renderChips(); render(); window.scrollTo({top:0});
 });
 
-function renderTop(){
-  const top=songs.filter(s=>s.request_count>0).sort((a,b)=>b.request_count-a.request_count).slice(0,5);
-  $('topBox').innerHTML=top.length?`<div class="top-box"><h2>🔥 Lo más pedido de la noche</h2>${top.map((s,i)=>`<div class="rank"><span class="n">${i+1}</span><span class="t">${esc(s.name)}</span><span class="c">${s.request_count} ${s.request_count===1?'vez':'veces'}</span></div>`).join('')}</div>`:'';
-}
-
 function filtered(){
   const q=norm($('search').value);
   let a=songs.filter(s=>(cat==='Todas'||(s.category||'Otras')===cat)&&(!q||norm(s.name).includes(q)));
@@ -135,7 +129,6 @@ function render(){
   const filtering=!!q||cat!=='Todas'||onlyTop;
   $('reset').style.display=filtering?'':'none';
   $('status').textContent=`${a.length} ${a.length===1?'canción':'canciones'}${filtering?(a.length===1?' encontrada':' encontradas'):(a.length===1?' disponible':' disponibles')}`;
-  $('topBox').style.display=(filtering)?'none':'';
   if(!a.length){ $('list').className=''; $('list').innerHTML='<div class="empty">😕 No encontramos esa canción.<br>Prueba con otra palabra o quita los filtros.<br><br><button class="btn" data-suggest="1">💡 Sugerir esta canción</button></div>'; document.body.classList.remove('has-az'); $('az').innerHTML=''; return; }
   $('list').className='';
   if(onlyTop){ $('list').className='songs'; $('list').innerHTML=a.map(songHTML).join(''); document.body.classList.remove('has-az'); $('az').innerHTML=''; return; }
@@ -185,7 +178,7 @@ $('form').addEventListener('submit',async e=>{
   if(error){ toast('No se pudo enviar: '+error.message,true); return; }
   if(name) store.set('baraja_name',name);
   song.request_count=(song.request_count||0)+1;
-  closeModal(); renderTop(); render();
+  closeModal(); render();
   toast('¡Petición enviada! 🎤 '+song.name);
 });
 
